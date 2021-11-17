@@ -1,0 +1,88 @@
+- name: Intialize cluster
+  become: true
+  shell: >
+    kubectl --kubeconfig=.kube/config cluster-info | grep -q "is running"
+    && echo NO_CHANGE
+    || kubeadm init --pod-network-cidr {{ pod_network_cidr }} --apiserver-advertise-address={{ master_ip }} --apiserver-bind-port {{ api_server_port }}
+  register: kubeadm_init
+  changed_when: kubeadm_init.stdout != 'NO_CHANGE'
+
+- name: Create Kubernetes config directory
+  file:
+    path: ".kube/"
+    state: directory
+
+- name: Copy admin.conf to Home directory
+  become: true
+  copy:
+    src: "/etc/kubernetes/admin.conf"
+    dest: "{{ kubeconfig }}"
+    owner: "{{ ansible_user | default(ansible_user_id) }}"
+    group: "{{ ansible_user | default(ansible_user_id) }}"
+    mode: 0755
+    remote_src: true
+
+- name: Create Flannel Pod Network
+  shell: >
+    kubectl --kubeconfig={{ kubeconfig }} get pods -n kube-system | grep -q "flannel"
+    && echo NO_CHANGE
+    || kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+  register: weave_cni
+  changed_when: weave_cni.stdout != 'NO_CHANGE'
+  until: weave_cni.rc == 0
+  retries: 5
+  delay: 2
+  ignore_errors: true
+
+- name: Deploy kubernetes dashboard into cluster
+  shell: >
+    kubectl --kubeconfig={{ kubeconfig }} get pods -n kubernetes-dashboard | grep -q "kubernetes-dashboard"
+    && echo NO_CHANGE
+    || kubectl --kubeconfig={{ kubeconfig }} apply -f https://raw.githubusercontent.com/kubernetes/dashboard/master/aio/deploy/recommended.yaml
+  register: kube_dashboard
+  changed_when: kube_dashboard.stdout != 'NO_CHANGE'
+  until: kube_dashboard.rc == 0
+  retries: 5
+  delay: 2
+  ignore_errors: true
+
+- name: Deploy K8s NVIDIA plugin
+  shell: >
+    kubectl --kubeconfig={{ kubeconfig }} get daemonset -n kube-system | grep -q "nvidia-device-plugin"
+    && echo NO_CHANGE
+    || kubectl create -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/1.0.0-beta4/nvidia-device-plugin.yml
+  register: k8s_nvidia_plugin
+  changed_when: k8s_nvidia_plugin.stdout != 'NO_CHANGE'
+  when: nvidia_cri
+
+- name: "Install jq"
+  become: true
+  apt:
+    name: jq
+
+- name: "Allow scheduling on master node (TODO: make it more robust)"
+  shell: >
+    kubectl get node {{ ansible_hostname }} -o json | jq '.spec.taints' | grep -q "NoSchedule"
+    && echo NO_CHANGE
+    || kubectl taint node {{ ansible_hostname }} node-role.kubernetes.io/master:NoSchedule-
+  register: untaint
+  changed_when: untaint.stdout != 'NO_CHANGE'
+
+# Store join information
+
+- name: "Store join information: Extract token"
+  shell: kubeadm token list -o json | jq -r '.token' | head -1
+  register: token
+
+- name: "Store join information: Extract certificate"
+  shell: >
+    openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt
+    | openssl rsa -pubin -outform der 2>/dev/null 
+    | openssl dgst -sha256 -hex 
+    | sed 's/^.* //'
+  register: certificate
+
+- name: "Store join information: Store join token and certificate"
+  set_fact:
+    join_token: "{{ token.stdout }}"
+    join_certificate: "{{ certificate.stdout }}"

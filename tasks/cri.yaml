@@ -1,0 +1,41 @@
+- name: "Install CRI: Install prerequisites for Docker repository"
+  become: true
+  apt:
+    name: ['apt-transport-https', 'ca-certificates', 'curl', 'gnupg2', 'software-properties-common']
+    update_cache: yes
+  
+- name: "Install CRI: Add Docker GPG key"
+  become: true
+  apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+
+- name: "Install CRI: Add Docker APT repository"
+  become: true
+  apt_repository:
+    repo: deb [arch=amd64] https://download.docker.com/{{ ansible_system | lower }}/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable
+
+- name: "Install CRI: Install Docker CE"
+  become: true
+  apt:
+    name: ['docker-ce', 'docker-ce-cli', 'containerd.io']
+    update_cache: yes
+
+- name: "Install CRI: Add any insecure registries to Docker config"
+  become: true
+  when: insecure_registries is defined and insecure_registries | length > 0
+  lineinfile: dest=/etc/default/docker regexp=^INSECURE_REGISTRY= line=INSECURE_REGISTRY="{% for reg in insecure_registries %}--insecure-registry={{ reg }} {% endfor %}"
+  notify: restart docker
+
+- name: "Install CRI: Fix cgroup driver"
+  become: true
+  copy:
+    content: |
+      {
+        "exec-opts": ["native.cgroupdriver=systemd"]
+      }
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: 0644
+  when: not nvidia_cri
+  notify: restart docker

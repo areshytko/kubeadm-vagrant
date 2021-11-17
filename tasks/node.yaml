@@ -1,0 +1,11 @@
+---
+- name: join cluster
+  become: true
+  shell: >
+    [ -f /etc/kubernetes/kubelet.conf ]
+    && echo NO_CHANGE
+    || kubeadm join {{ master_ip }}:{{ api_server_port }}
+    --token {{ join_token }}
+    --discovery-token-ca-cert-hash sha256:{{ join_certificate }}
+  register: node_join
+  changed_when: node_join.stdout != 'NO_CHANGE'

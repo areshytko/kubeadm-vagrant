@@ -1,0 +1,7 @@
+
+master_ip: "192.168.56.2"
+api_server_port: "6443"
+pod_network_cidr: "10.244.0.0/16"
+install_cri: true
+nvidia_cri: true
+insecure_registries: []

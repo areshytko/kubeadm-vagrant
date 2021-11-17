@@ -1,0 +1,21 @@
+- name: Install prerequisites for kubeadm, kubelet and kubectl
+  become: true
+  apt:
+    name: ['apt-transport-https', 'ca-certificates', 'curl', 'gnupg2', 'software-properties-common']
+    update_cache: yes
+
+- name: Add Kubernetes GPG key
+  become: true
+  apt_key:
+    url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+
+- name: Add Kubernetes APT repository
+  become: true
+  apt_repository:
+    repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
+
+- name: Install kubeadm, kubelet and kubectl
+  become: true
+  apt:
+    name: ['kubelet', 'kubeadm', 'kubectl']
+    update_cache: yes

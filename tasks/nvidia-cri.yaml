@@ -1,0 +1,81 @@
+
+- name: "Install NVIDIA CRI: ensure facts directory exists"
+  become: true
+  file:
+    path: "/etc/ansible/facts.d"
+    state: directory
+    owner: "root"
+    group: "root"
+
+- name: "Install NVIDIA CRI: setup custom facts"
+  become: true
+  copy:
+    src: "etc/ansible/facts.d/nv_os_release.fact"
+    dest: "/etc/ansible/facts.d/nv_os_release.fact"
+    owner: "root"
+    group: "root"
+    mode: "0755"
+
+- name: "Install NVIDIA CRI: re-gather facts"
+  setup: filter=ansible_local
+
+- name: "Install NVIDIA CRI: add key"
+  become: true
+  apt_key:
+    url: "https://nvidia.github.io/nvidia-docker/gpgkey"
+    state: present
+
+- name: "Install NVIDIA CRI: add repo"
+  become: true
+  get_url:
+    url: "https://nvidia.github.io/nvidia-docker/{{ ansible_local['nv_os_release']['nv_os_release'] }}/nvidia-docker.list"
+    dest: "/etc/apt/sources.list.d/nvidia-docker.list"
+    mode: 0644
+    owner: root
+    group: root
+
+- name: "Install NVIDIA CRI: install packages"
+  become: true
+  apt:
+    name: nvidia-container-runtime
+    state: present
+    update_cache: yes
+  notify: restart docker
+
+- name: create /etc/docker
+  become: true
+  file:
+    path: /etc/docker
+    state: directory
+    mode: '0755'
+
+- name: "Install NVIDIA CRI: set docker daemon configuration"
+  become: true
+  copy:
+    content: |
+      {
+        "exec-opts": ["native.cgroupdriver=systemd"],
+        "runtimes":
+        {
+          "nvidia":
+          {
+            "path": "/usr/bin/nvidia-container-runtime",
+            "runtimeArgs": []
+          }
+        },
+        "default-runtime": "nvidia"
+      }
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: 0644
+  notify: restart docker
+
+- name: "Install NVIDIA CRI: grab nvidia-docker wrapper"
+  become: true
+  get_url:
+    url: https://raw.githubusercontent.com/NVIDIA/nvidia-docker/master/nvidia-docker
+    dest: /usr/local/bin/nvidia-docker
+    mode: 0755
+    owner: root
+    group: root

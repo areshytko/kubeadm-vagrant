@@ -1,0 +1,25 @@
+---
+- name: Provision common prerequisites for kubeadm K8s cluster on all nodes
+  hosts: all
+  tasks:
+    - import_tasks: ../tasks/os-prerequisites.yaml
+    - import_tasks: ../tasks/cri.yaml
+      when: install_cri
+    - import_tasks: ../tasks/nvidia-cri.yaml
+      when: nvidia_cri and install_cri
+    - import_tasks: ../tasks/install.yaml
+  handlers:
+    - import_tasks: ../handlers/main.yml
+
+- name: Setup Control Plane
+  hosts: master
+  tasks:
+    - import_tasks: ../tasks/master.yaml
+
+- name: Setup Nodes
+  hosts: node
+  tasks:
+    - import_tasks: ../tasks/node.yaml
+      vars:
+        join_token: "{{ hostvars['kubemaster']['join_token'] }}"
+        join_certificate: "{{ hostvars['kubemaster']['join_certificate'] }}"

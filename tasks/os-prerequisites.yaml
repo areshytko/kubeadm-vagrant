@@ -1,0 +1,31 @@
+- name: "Letting iptables see bridged traffic: make sure that the br_netfilter module is loaded"
+  become: true
+  shell: >
+          lsmod | grep -q br_netfilter
+          && echo NO_CHANGE
+          || modprobe br_netfilter
+  register: br_netfilter_load
+  changed_when: br_netfilter_load.stdout != 'NO_CHANGE'
+- name: "Letting iptables see bridged traffic: update sysctl config file - 1"
+  become: true
+  shell: |
+          [ -f /etc/modules-load.d/k8s.conf ] && cat /etc/modules-load.d/k8s.conf | grep -q "br_netfilter" \
+          && echo NO_CHANGE \
+          || cat <<EOF | tee /etc/modules-load.d/k8s.conf
+          br_netfilter
+          EOF
+  register: sysctl_config_update_1
+  changed_when: sysctl_config_update_1.stdout != 'NO_CHANGE'
+
+- name: "Letting iptables see bridged traffic: update sysctl config file - 2"
+  become: true
+  shell: |
+          [ -f /etc/sysctl.d/k8s.conf ] && cat /etc/sysctl.d/k8s.conf | grep -q "net.bridge.bridge-nf-call-ip6tables = 1" \
+          && echo NO_CHANGE \
+          || ( cat <<EOF | tee /etc/sysctl.d/k8s.conf
+          net.bridge.bridge-nf-call-ip6tables = 1
+          net.bridge.bridge-nf-call-iptables = 1
+          EOF
+          sysctl --system )
+  register: sysctl_config_update
+  changed_when: sysctl_config_update.stdout != 'NO_CHANGE'

@@ -1,0 +1,33 @@
+- hosts: all
+  gather_facts: no
+  become: yes
+  tasks:
+    - name: Reset Kubernetes component
+      shell: "kubeadm reset --force"
+      ignore_errors: True
+    - name: remove K8s packages
+      apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: absent
+        autoremove: yes
+        purge: yes
+    # - name: remove Docker packages
+    #   apt:
+    #     name:
+    #       - docker-ce
+    #       - docker-ce-cli
+    #       - containerd.io
+    #     state: absent
+    #     autoremove: yes
+    #     purge: yes
+    # - name: remove nvidia docker packages
+    #   apt:
+    #     name:
+    #       - nvidia-docker
+    #       - nvidia-docker2
+    #     state: absent
+    #     autoremove: yes
+    #     purge: yes
